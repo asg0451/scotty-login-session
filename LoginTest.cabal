@@ -12,7 +12,7 @@ category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
 
-executable WebMain
+executable LoginTest
   hs-source-dirs:      src
   main-is:             Main.hs
 --  other-modules:       Pages
@@ -27,6 +27,7 @@ executable WebMain
                      , persistent-template
                      , persistent-sqlite
                      , random
+                     , http-types
 -- temporary
                      , scotty-cookie
 
