@@ -4,3 +4,4 @@ nohup.out
 .stack-work/*
 .cabal-sandbox/*
 cabal.sandbox.config
+LoginTest

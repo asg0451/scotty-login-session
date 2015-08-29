@@ -3,11 +3,9 @@
 
 module Main where
 
--- import           Web.Scotty.Trans         as S
-
 import           Network.HTTP.Types.Status (unauthorized401)
 import           Web.Scotty                as S
-import           Web.Scotty.Cookie         as C
+-- import           Web.Scotty.Cookie         as C
 
 import           Control.Applicative
 import           Control.Monad.IO.Class
@@ -18,20 +16,23 @@ import           Data.Monoid
 import qualified Data.Text                 as TS
 import qualified Data.Text.IO              as TIO
 import qualified Data.Text.Lazy            as T
-
+import           System.Environment        (getEnv)
 
 import           Database.Persist          as D
 import           Database.Persist.Sqlite
 import           Model
 import           System.Random             (randomIO)
 
+import           ScottyCookie              as C
+
 main :: IO ()
 main = do
+  p <- getEnv "PORT"
   liftIO $ runDB $ runMigration migrateAll
-  scotty 4242 $ do
+  scotty (read p) $ do
     routes
 
-
+routes :: ScottyM ()
 routes = do
   S.get "/" $ S.text "home"
   S.get "/denied" $ S.text "login denied -- wrong username or password"
@@ -45,39 +46,26 @@ routes = do
       let val = TS.pack $ show h
       setSimpleCookie "SessionId" val
       liftIO $ insertSession $ T.fromStrict val
-      redirect "/"
-  S.get "/authed" $ do
-    c <- getCookie "SessionId"
-    case c of
-     Nothing -> S.text "auth cookie not found"
-     Just v -> do -- Text
-       session <- liftIO $ runDB $ selectFirst [SessionSid ==. T.fromStrict v] []
-       case session of
-        Nothing -> S.text "auth cookie found but not in db"
-        Just s -> do
-          S.text "authed"
+      redirect "/authed"
+  S.get "/authed" $ authCheck $ do
+    S.text "authed"
 
+authCheck :: ActionM () -> ActionM()
+authCheck a = do
+  c <- getCookie "SessionId"
+  case c of
+   Nothing -> S.text "auth cookie not found"
+   Just v -> do -- Text
+     session <- liftIO $ runDB $ selectFirst [SessionSid ==. T.fromStrict v] []
+     case session of
+      Nothing -> S.text "auth cookie found but not in db"
+      Just s -> a
 
-
+insertSession :: T.Text -> IO (Key Session)
 insertSession sid = runDB $ insert $ Session sid
 
-runDB = runSqlite "db.sqlite3"
+runDB = runSqlite ":memory:" -- "db.sqlite3"
 
+doOrDeny :: Bool -> ActionM () -> ActionM ()
 doOrDeny p s = if p then s else do S.status unauthorized401
                                    redirect "/denied"
-
--- type Env = [(String, String)]
--- type StateIO = StateT Env IO -- still takes ret val
-
--- type ActionM' = ActionT T.Text StateIO
-
--- s = [("a", "30")] :: Env
-
--- main = do
---   scottyT 4242 (`evalStateT` s) $ do
---     S.get "/" $ app'
-
--- app' :: ActionM' ()
--- app' =  do
---   v <- lift $ L.get
---   html $ T.pack $ show $ v

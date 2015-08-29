@@ -1,13 +1,12 @@
 name:                LoginTest
 version:             0.1.0.0
-synopsis:            Simple project template from stack
-description:         Please see README.md
-homepage:            http://github.com/githubuser/WebMain#readme
+synopsis:            Test for scotty sessions
+description:         Please see README.md (does not exist)
+-- homepage:            http://github.com//WebMain#readme
 license:             BSD3
-license-file:        LICENSE
-author:              Example Author Name
-maintainer:          example@example.com
-copyright:           2010 Author Here
+-- license-file:        LICENSE
+author:              Miles Frankel
+maintainer:          miles.frankel@gmail.com
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
@@ -15,7 +14,7 @@ cabal-version:       >=1.10
 executable LoginTest
   hs-source-dirs:      src
   main-is:             Main.hs
---  other-modules:       Pages
+  other-modules:       Model, ScottyCookie
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
                      , scotty
@@ -28,7 +27,13 @@ executable LoginTest
                      , persistent-sqlite
                      , random
                      , http-types
+-- for cookies
+                     , blaze-builder
+                     , bytestring
+                     , containers
+                     , cookie
+                     , time
 -- temporary
-                     , scotty-cookie
+--                     , scotty-cookie
 
 --                     , containers
