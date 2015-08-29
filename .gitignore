@@ -1,0 +1,6 @@
+auth.txt
+dist/*
+nohup.out
+.stack-work/*
+.cabal-sandbox/*
+cabal.sandbox.config
