@@ -1,25 +1,25 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Session ( initializeCookieDb
-               , addSession
-               , authCheck
-               )
+module Web.Scotty.Login.Session ( initializeCookieDb
+                                , addSession
+                                , authCheck
+                                )
        where
 
 import           Control.Concurrent
 import           Control.Monad.IO.Class
-import           Control.Monad.State.Lazy as L
-import           Cookies                  as C
-import qualified Data.Text                as TS
-import qualified Data.Text.Lazy           as T
+import qualified Data.Text                         as TS
+import qualified Data.Text.Lazy                    as T
 import           Data.Time.Clock
-import           Database.Persist         as D
+import           Database.Persist                  as D
 import           Database.Persist.Sqlite
-import           Model
-import           System.Random            (randomIO)
-import           Web.Scotty.Cookie        as SC
-import           Web.Scotty.Trans         as S
+import           System.Random                     (randomIO)
+import           Web.Scotty.Cookie                 as SC
+import           Web.Scotty.Trans                  as S
+
+import           Web.Scotty.Login.Internal.Cookies as C
+import           Web.Scotty.Login.Internal.Model
 
 initializeCookieDb :: IO ()
 initializeCookieDb = void $ do
@@ -70,3 +70,6 @@ insertSession :: T.Text -> UTCTime -> IO (Key Session)
 insertSession sid t = runDB $ insert $ Session sid t
 
 runDB = runSqlite "db.sqlite3"
+
+void :: (Monad m) => m a -> m ()
+void a = a >> return ()

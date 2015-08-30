@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeSynonymInstances       #-}
 {-# OPTIONS_GHC -fno-warn-orphans       #-}
 
-module Model where
+module Web.Scotty.Login.Internal.Model where
 
 -- import Database.Persist
 import qualified Data.Text.Lazy      as T

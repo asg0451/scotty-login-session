@@ -1,4 +1,4 @@
-module Cookies where
+module Web.Scotty.Login.Internal.Cookies where
 import qualified Data.Text         as T
 import           Data.Time.Clock
 import           Web.Cookie
