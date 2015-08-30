@@ -42,6 +42,7 @@ module ScottyCookie
        ( makeSimpleCookie
        , setCookie
        , setSimpleCookie
+       , setSimpleCookieExpr
        , getCookie
        , getCookies
        , deleteCookie
@@ -57,6 +58,7 @@ import qualified Data.Map                 as Map
 
 import qualified Data.ByteString.Lazy     as BSL
 
+import           Data.Time.Clock
 import           Data.Time.Clock.POSIX    (posixSecondsToUTCTime)
 
 import           Blaze.ByteString.Builder (toLazyByteString)
@@ -85,6 +87,15 @@ setSimpleCookie :: (Monad m, ScottyError e)
                 -> TS.Text -- ^ value
                 -> ActionT e m ()
 setSimpleCookie n v = setCookie $ makeSimpleCookie n v
+
+setSimpleCookieExpr :: (Monad m, ScottyError e)
+                => TS.Text -- ^ name
+                -> TS.Text -- ^ value
+                -> UTCTime
+                -> ActionT e m ()
+setSimpleCookieExpr n v t = setCookie $
+                            ((makeSimpleCookie n v) { setCookieExpires = (Just t)})
+
 
 
 getCookie :: (Monad m, ScottyError e)

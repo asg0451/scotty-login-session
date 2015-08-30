@@ -16,11 +16,13 @@ module Model where
 
 -- import Database.Persist
 import qualified Data.Text.Lazy      as T
+import           Data.Time.Clock
 import           Database.Persist.TH
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"]
   [persistLowerCase|
    Session
            sid T.Text
+           expiration UTCTime
            deriving Show
   |]
