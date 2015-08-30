@@ -1,4 +1,4 @@
-name:                LoginTest
+name:                scotty-login-session
 version:             0.1.0.0
 synopsis:            Test for scotty sessions
 description:         Please see README.md (does not exist)
@@ -11,29 +11,21 @@ category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
 
-executable LoginTest
-  hs-source-dirs:      src
-  main-is:             Main.hs
-  other-modules:       Model, ScottyCookie
+Library
+  hs-source-dirs:      src, src/Web/Scotty/Login, src/Web/Scotty/Login/Internal
+  ghc-options:         -O2 -threaded -Wall
+  exposed-modules:     Session
+  other-modules:       Model, Cookies
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
-                     , scotty
-                     , blaze-html
+                     , scotty >= 0.10.2
                      , text
-                     , transformers
+                     , transformers >= 0.3
                      , mtl
                      , persistent
                      , persistent-template
                      , persistent-sqlite
                      , random
-                     , http-types
--- for cookies
-                     , blaze-builder
-                     , bytestring
-                     , containers
                      , cookie
-                     , time
--- temporary
---                     , scotty-cookie
-
---                     , containers
+                     , time >= 1.4
+                     , scotty-cookie
