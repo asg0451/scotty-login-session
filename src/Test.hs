@@ -3,19 +3,16 @@
 
 module Main where
 
-import qualified Data.Text.Lazy            as T
-import           Session
-import           Web.Scotty                as S
+import qualified Data.Text.Lazy           as T
+import           Web.Scotty               as S
+import           Web.Scotty.Login.Session
 
-import           Control.Monad.IO.Class    (liftIO)
-import           Network.HTTP.Types.Status (unauthorized401)
-import           System.Environment        (getEnv)
+import           Control.Monad.IO.Class   (liftIO)
 
 main :: IO ()
 main = do
   initializeCookieDb
-  p <- getEnv "PORT"
-  scotty (read p) routes
+  scotty (4040) routes
 
 routes :: ScottyM ()
 routes = do
@@ -29,7 +26,6 @@ routes = do
     if usn == "guest" && pass == "password"
       then do addSession
               redirect "/authed"
-      else do S.status unauthorized401
-              redirect "/denied"
+      else do redirect "/denied"
   S.get "/authed" $ authCheck (redirect "/denied") $
     S.text "authed"

@@ -65,11 +65,10 @@ authCheck d a = do
                      else d -- this shouldnt happen, browser should delete it
 
 
-
 insertSession :: T.Text -> UTCTime -> IO (Key Session)
 insertSession sid t = runDB $ insert $ Session sid t
 
-runDB = runSqlite "db.sqlite3"
+runDB = runSqlite "sessions.sqlite3"
 
 void :: (Monad m) => m a -> m ()
 void a = a >> return ()
