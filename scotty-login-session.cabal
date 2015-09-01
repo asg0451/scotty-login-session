@@ -14,7 +14,7 @@ cabal-version:       >=1.10
 
 Library
   hs-source-dirs:      src
-  ghc-options:         -Wall
+  ghc-options:         -Wall -fno-warn-unused-do-bind
   exposed-modules:     Web.Scotty.Login.Session
   other-modules:       Web.Scotty.Login.Internal.Model, Web.Scotty.Login.Internal.Cookies
   default-language:    Haskell2010
@@ -32,6 +32,7 @@ Library
                      , bytestring
                      , monad-logger
                      , resourcet
+                     , stm
 
 executable Test
   hs-source-dirs:      src
@@ -52,3 +53,4 @@ executable Test
                      , bytestring
                      , monad-logger
                      , resourcet
+                     , stm

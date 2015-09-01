@@ -3,7 +3,7 @@
 
 module Main where
 
-import           Control.Monad.IO.Class   (liftIO)
+import           Data.IORef
 import qualified Data.Text.Lazy           as T
 import           Web.Scotty               as S
 import           Web.Scotty.Login.Session
@@ -13,11 +13,11 @@ conf = defaultSessionConfig
 
 main :: IO ()
 main = do
-  initializeCookieDb conf
-  scotty 4040 routes
+  sv <- initializeCookieDb conf
+  scotty 4040 (routes sv)
 
-routes :: ScottyM ()
-routes = do
+routes :: IORef SessionVault -> ScottyM ()
+routes sv = do
   S.get "/" $ S.text "home"
   S.get "/denied" $ S.text "login denied -- wrong username or password"
   S.get "/login" $ do S.html $ T.pack $ unlines $
@@ -30,8 +30,8 @@ routes = do
     (usn :: String) <- param "username"
     (pass :: String) <- param "password"
     if usn == "guest" && pass == "password"
-      then do addSession conf
+      then do addSession conf sv
               redirect "/authed"
       else do redirect "/denied"
-  S.get "/authed" $ authCheck conf (redirect "/denied") $
+  S.get "/authed" $ authCheck conf sv (redirect "/denied") $
     S.text "authed"
