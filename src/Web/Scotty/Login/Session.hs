@@ -34,6 +34,7 @@ import           Control.Monad.Trans.Resource      (ResourceT)
 
 import           Data.IORef
 import           Data.List                         (find, nub)
+import           System.IO.Unsafe                  (unsafePerformIO)
 -- import qualified Data.Map                          as M
 
 
@@ -53,43 +54,53 @@ type SessionStore = IORef SessionVault
 defaultSessionConfig :: SessionConfig
 defaultSessionConfig = SessionConfig "sessions.sqlite3" 60 120
 
-initializeCookieDb :: SessionConfig -> IO (SessionStore)
+{-# NOINLINE vault #-}
+vault :: SessionStore
+vault = unsafePerformIO $ newIORef []
+
+readVault :: IO SessionVault
+readVault = readIORef vault
+
+-- modifyVault :: (SessionVault -> SessionVault) -> IO SessionStore
+modifyVault f = atomicModifyIORef' vault (flip (,) () . f)
+
+initializeCookieDb :: SessionConfig -> IO ()
 initializeCookieDb c =  do
   t <- getCurrentTime
   ses <- runDB c $ do runMigration migrateAll
                       selectList [SessionExpiration >=. t] []
   let sessions = (map entityVal ses) :: SessionVault
-  vault <- newIORef sessions
-  forkIO $ dbSyncAndCleanupLoop c vault
-  return vault
+  modifyVault $ const sessions
+  forkIO $ dbSyncAndCleanupLoop c
+  return ()
 
-dbSyncAndCleanupLoop :: SessionConfig -> SessionStore -> IO ()
-dbSyncAndCleanupLoop c v = do
+dbSyncAndCleanupLoop :: SessionConfig  -> IO ()
+dbSyncAndCleanupLoop c = do
   threadDelay $ syncInterval c * 1000000
   putStrLn "Deleting expired sessions from database..."
   t <- getCurrentTime
-  vaultContents <- readIORef v
+  vaultContents <- readVault
   mapM_ (runDB c . insert) vaultContents
   runDB c $ deleteWhere [SessionExpiration <=. t]
-  dbSyncAndCleanupLoop c v -- recurse
+  modifyVault $ filter (\s -> sessionExpiration s >= t)
+  dbSyncAndCleanupLoop c -- recurse
 
-addSession :: SessionConfig -> SessionStore -> ActionT T.Text IO () -- (Key Session)
-addSession c v = do
+addSession :: SessionConfig  -> ActionT T.Text IO () -- (Key Session)
+addSession c = do
   (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
   t <- liftIO getCurrentTime
   let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
       t' = addUTCTime (expirationInterval c) t -- ten minutes
   C.setSimpleCookieExpr "SessionId" val t'
-  liftIO $ insertSession v (T.fromStrict val) t'
+  liftIO $ insertSession (T.fromStrict val) t'
 
 -- denial action, approval action
 authCheck :: (MonadIO m, ScottyError e)
-             => SessionStore
+             => ActionT e m ()
              -> ActionT e m ()
              -> ActionT e m ()
-             -> ActionT e m ()
-authCheck vault d a = do
-  vaultContents <- liftIO $ readIORef vault
+authCheck d a = do
+  vaultContents <- liftIO $ readVault
   liftIO $ putStrLn "authCheck vault contents:"
   liftIO $ print $ vaultContents
   c <- SC.getCookie "SessionId"
@@ -109,14 +120,13 @@ authCheck vault d a = do
 
 
 -- now have to sync in-mem db to sqlite db
-insertSession :: SessionStore
-                 -> T.Text
+insertSession :: T.Text
                  -> UTCTime
                  -> IO ()
-insertSession v sid t = do
+insertSession sid t = do
   putStrLn "insert session vault contents:"
-  print =<< readIORef v
-  atomicModifyIORef' v $ \v' -> (((Session sid t) : v'), ())
+  print =<< readVault
+  modifyVault $ \v' -> (Session sid t) : v'
 
 runDB :: SessionConfig
          -> SqlPersistT (NoLoggingT (ResourceT IO)) a

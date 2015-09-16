@@ -13,11 +13,11 @@ conf = defaultSessionConfig
 
 main :: IO ()
 main = do
-  sv <- initializeCookieDb conf
-  scotty 4040 (routes sv)
+  initializeCookieDb conf
+  scotty 4040 routes
 
-routes :: SessionStore -> ScottyM ()
-routes sv = do
+routes :: ScottyM ()
+routes = do
   S.get "/" $ S.text "home"
   S.get "/denied" $ S.text "login denied -- wrong username or password"
   S.get "/login" $ do S.html $ T.pack $ unlines $
@@ -30,8 +30,8 @@ routes sv = do
     (usn :: String) <- param "username"
     (pass :: String) <- param "password"
     if usn == "guest" && pass == "password"
-      then do addSession conf sv
+      then do addSession conf
               redirect "/authed"
       else do redirect "/denied"
-  S.get "/authed" $ authCheck sv (redirect "/denied") $
-    S.text "authed"
+  S.get "/authed" $ authCheck (redirect "/denied") $
+    S.text "authedd"
