@@ -32,7 +32,7 @@ Library
                      , bytestring
                      , monad-logger
                      , resourcet
-                     , stm
+                     , containers
 
 executable Test
   hs-source-dirs:      src
@@ -53,4 +53,4 @@ executable Test
                      , bytestring
                      , monad-logger
                      , resourcet
-                     , stm
+                     , containers

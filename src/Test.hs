@@ -16,7 +16,7 @@ main = do
   sv <- initializeCookieDb conf
   scotty 4040 (routes sv)
 
-routes :: IORef SessionVault -> ScottyM ()
+routes :: SessionStore -> ScottyM ()
 routes sv = do
   S.get "/" $ S.text "home"
   S.get "/denied" $ S.text "login denied -- wrong username or password"
@@ -33,5 +33,5 @@ routes sv = do
       then do addSession conf sv
               redirect "/authed"
       else do redirect "/denied"
-  S.get "/authed" $ authCheck conf sv (redirect "/denied") $
+  S.get "/authed" $ authCheck sv (redirect "/denied") $
     S.text "authed"
