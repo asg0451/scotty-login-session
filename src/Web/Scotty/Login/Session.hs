@@ -3,6 +3,8 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
+-- TODO switch to TVars?
+
 module Web.Scotty.Login.Session ( initializeCookieDb
                                 , addSession
                                 , authCheck
@@ -13,6 +15,7 @@ module Web.Scotty.Login.Session ( initializeCookieDb
        where
 import           Control.Concurrent                (forkIO, threadDelay)
 import           Control.Monad.IO.Class
+import           Data.Monoid
 import qualified Data.Text                         as TS
 import qualified Data.Text.Lazy                    as T
 import           Data.Time.Clock
