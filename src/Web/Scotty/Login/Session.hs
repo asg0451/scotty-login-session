@@ -72,7 +72,7 @@ initializeCookieDb c =  do
   t <- getCurrentTime
   ses <- runDB c $ do runMigration migrateAll
                       selectList [SessionExpiration >=. t] []
-  let sessions = (map entityVal ses) :: SessionVault
+  let sessions = map entityVal ses :: SessionVault
   modifyVault $ const sessions
   forkIO $ dbSyncAndCleanupLoop c
   return ()
@@ -102,7 +102,7 @@ authCheck :: (MonadIO m, ScottyError e)
              -> ActionT e m ()
              -> ActionT e m ()
 authCheck d a = do
-  vaultContents <- liftIO $ readVault
+  vaultContents <- liftIO readVault
   c <- SC.getCookie "SessionId"
   case c of
    Nothing -> d
@@ -123,7 +123,7 @@ authCheck d a = do
 insertSession :: T.Text
                  -> UTCTime
                  -> IO ()
-insertSession sid t = modifyVault $ \v' -> (Session sid t) : v'
+insertSession sid t = modifyVault (Session sid t :)
 
 runDB :: SessionConfig
          -> SqlPersistT (NoLoggingT (ResourceT IO)) a
