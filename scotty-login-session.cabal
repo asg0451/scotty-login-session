@@ -3,13 +3,18 @@ version:             0.1.0.0
 synopsis:            Test for scotty sessions
 description:         Please see README.md (does not exist)
 -- homepage:            http://github.com//WebMain#readme
-license:             BSD3
--- license-file:        LICENSE
+license:             GPL-2
+license-file:        LICENSE
 author:              Miles Frankel
 maintainer:          miles.frankel@gmail.com
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
+
+source-repository head
+  type: git
+  location: git://github.com/asg0451/scotty_auth_test.git
+
 
 
 Library
