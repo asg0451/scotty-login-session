@@ -1,8 +1,7 @@
 name:                scotty-login-session
 version:             0.1.0.0
-synopsis:            Test for scotty sessions
-description:         Please see README.md (does not exist)
--- homepage:            http://github.com//WebMain#readme
+synopsis:            Simple library for Scotty sessions and authorization
+description:         Simple library for session adding and checking, with automatic SQLite backup of session store. The store is stored in memory for fast access. Session cookie expiration and database syncing timing are configurable.
 license:             GPL-2
 license-file:        LICENSE
 author:              Miles Frankel
@@ -14,8 +13,6 @@ cabal-version:       >=1.10
 source-repository head
   type: git
   location: git://github.com/asg0451/scotty_auth_test.git
-
-
 
 Library
   hs-source-dirs:      src
@@ -37,25 +34,4 @@ Library
                      , bytestring
                      , monad-logger
                      , resourcet
-                     , containers
-
--- executable Test
---   hs-source-dirs:      src
---   ghc-options:         -Wall
---   main-is:             Test.hs
---   default-language:    Haskell2010
---   build-depends:       base >= 4.7 && < 5
---                      , scotty >= 0.10.2
---                      , text
---                      , transformers >= 0.3
---                      , persistent
---                      , persistent-template
---                      , persistent-sqlite
---                      , cookie
---                      , time >= 1.4
---                      , scotty-cookie
---                      , cryptonite
---                      , bytestring
---                      , monad-logger
---                      , resourcet
---                      , containers
+--                     , containers

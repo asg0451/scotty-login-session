@@ -36,7 +36,7 @@ import           Control.Monad.Logger              (NoLoggingT)
 import           Control.Monad.Trans.Resource      (ResourceT)
 
 import           Data.IORef
-import           Data.List                         (find, nub)
+import           Data.List                         (find)
 import           System.IO.Unsafe                  (unsafePerformIO)
 -- import qualified Data.Map                          as M
 
@@ -64,7 +64,7 @@ vault = unsafePerformIO $ newIORef []
 readVault :: IO SessionVault
 readVault = readIORef vault
 
--- modifyVault :: (SessionVault -> SessionVault) -> IO SessionStore
+modifyVault :: (SessionVault -> SessionVault) -> IO ()
 modifyVault f = atomicModifyIORef' vault (flip (,) () . f)
 
 initializeCookieDb :: SessionConfig -> IO ()
@@ -80,13 +80,12 @@ initializeCookieDb c =  do
 dbSyncAndCleanupLoop :: SessionConfig  -> IO ()
 dbSyncAndCleanupLoop c = do
   threadDelay $ syncInterval c * 1000000
-  putStrLn "Deleting expired sessions from database..."
   t <- getCurrentTime
   vaultContents <- readVault
   mapM_ (runDB c . insert) vaultContents
   runDB c $ deleteWhere [SessionExpiration <=. t]
   modifyVault $ filter (\s -> sessionExpiration s >= t)
-  dbSyncAndCleanupLoop c -- recurse
+  dbSyncAndCleanupLoop c -- tail (hopefully) recurse
 
 addSession :: SessionConfig  -> ActionT T.Text IO () -- (Key Session)
 addSession c = do
@@ -104,8 +103,6 @@ authCheck :: (MonadIO m, ScottyError e)
              -> ActionT e m ()
 authCheck d a = do
   vaultContents <- liftIO $ readVault
-  liftIO $ putStrLn "authCheck vault contents:"
-  liftIO $ print $ vaultContents
   c <- SC.getCookie "SessionId"
   case c of
    Nothing -> d
@@ -126,10 +123,7 @@ authCheck d a = do
 insertSession :: T.Text
                  -> UTCTime
                  -> IO ()
-insertSession sid t = do
-  putStrLn "insert session vault contents:"
-  print =<< readVault
-  modifyVault $ \v' -> (Session sid t) : v'
+insertSession sid t = modifyVault $ \v' -> (Session sid t) : v'
 
 runDB :: SessionConfig
          -> SqlPersistT (NoLoggingT (ResourceT IO)) a
