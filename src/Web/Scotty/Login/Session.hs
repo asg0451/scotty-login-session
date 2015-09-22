@@ -2,19 +2,30 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
-
 -- TODO switch to TVars?
+
+{-|
+Module:              Web.Scotty.Login.Session
+Description:         Simple library for Scotty sessions and authorization
+Copyright:           (c) Miles Frankel, 2015
+License:             GPL-2
+
+A Simple library for session adding and checking, with automatic SQLite backup of session store. The store is stored in memory for fast access. Session cookie expiration and database syncing timing are configurable.
+
+-}
+
 
 module Web.Scotty.Login.Session ( initializeCookieDb
                                 , addSession
                                 , authCheck
                                 , SessionConfig(..)
                                 , defaultSessionConfig
-                                , SessionStore
                                 )
        where
 import           Control.Concurrent                (forkIO, threadDelay)
+import           Control.Monad                     (when)
 import           Control.Monad.IO.Class
+import           Data.Maybe                        (isNothing)
 import           Data.Monoid
 import qualified Data.Text                         as TS
 import qualified Data.Text.Lazy                    as T
@@ -40,22 +51,31 @@ import           Data.List                         (find)
 import           System.IO.Unsafe                  (unsafePerformIO)
 -- import qualified Data.Map                          as M
 
-
-data SessionConfig = SessionConfig { dbName             :: String
-                                   , syncInterval       :: Int --seconds
-                                   , expirationInterval :: NominalDiffTime
-                                   }
+-- | Configuration for the session database.
+data SessionConfig =
+  SessionConfig { dbPath             :: String          -- ^ Path to SQLite database file
+                , syncInterval       :: NominalDiffTime -- ^ Time between syncs to database (seconds)
+                , expirationInterval :: NominalDiffTime -- ^ Cookie expiration time (seconds)
+                }
 {- data Session
   = Session {sessionSid :: !T.Text, sessionExpiration :: !UTCTime} -}
 
- -- is this the best way to do this?
 type SessionVault = [Session]
 
 type SessionStore = IORef SessionVault
 
+-- | Default settings for the session store. May not be suitable for all applications.
+--
+-- They are:
+--
+-- * dbPath = \"sessions.sqlite\",
+--
+-- * syncInterval = 1200 seconds (30 minutes),
+--
+-- * expirationInterval = 86400 seconds (1 day)
 
 defaultSessionConfig :: SessionConfig
-defaultSessionConfig = SessionConfig "sessions.sqlite3" 60 120
+defaultSessionConfig = SessionConfig "sessions.sqlite3" 1200 120
 
 {-# NOINLINE vault #-}
 vault :: SessionStore
@@ -67,6 +87,7 @@ readVault = readIORef vault
 modifyVault :: (SessionVault -> SessionVault) -> IO ()
 modifyVault f = atomicModifyIORef' vault (flip (,) () . f)
 
+-- | Reload the session database into memory, and fork the database sync and cleanup thread. This must be called before invoking scotty.
 initializeCookieDb :: SessionConfig -> IO ()
 initializeCookieDb c =  do
   t <- getCurrentTime
@@ -79,7 +100,7 @@ initializeCookieDb c =  do
 
 dbSyncAndCleanupLoop :: SessionConfig  -> IO ()
 dbSyncAndCleanupLoop c = do
-  threadDelay $ syncInterval c * 1000000
+  threadDelay $ (floor $ syncInterval c) * 1000000
   t <- getCurrentTime
   vaultContents <- readVault
   mapM_ (runDB c . insert) vaultContents
@@ -87,19 +108,29 @@ dbSyncAndCleanupLoop c = do
   modifyVault $ filter (\s -> sessionExpiration s >= t)
   dbSyncAndCleanupLoop c -- tail (hopefully) recurse
 
-addSession :: SessionConfig  -> ActionT T.Text IO () -- (Key Session)
+-- | Add a session. This gives the user a SessionId cookie, and inserts a corresponding entry into the session store.
+addSession :: SessionConfig  -> ActionT T.Text IO ()
 addSession c = do
-  (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
-  t <- liftIO getCurrentTime
-  let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
-      t' = addUTCTime (expirationInterval c) t -- ten minutes
-  C.setSimpleCookieExpr "SessionId" val t'
-  liftIO $ insertSession (T.fromStrict val) t'
+  existingCookie <- SC.getCookie "SessionId"
+  when (isNothing existingCookie) $ do
+    (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
+    t <- liftIO getCurrentTime
+    let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
+        t' = addUTCTime (expirationInterval c) t
+    C.setSimpleCookieExpr "SessionId" val t'
+    liftIO $ insertSession (T.fromStrict val) t'
 
--- denial action, approval action
+-- | Check whether a user is authorized.
+--
+-- Example usage:
+--
+-- @
+--    S.get \"\/auth_test\" $ authCheck (redirect \"\/denied\") $
+--      S.text "authorized"
+-- @
 authCheck :: (MonadIO m, ScottyError e)
-             => ActionT e m ()
-             -> ActionT e m ()
+             => ActionT e m () -- ^ The action to perform if user is denied
+             -> ActionT e m () -- ^ The action to perform if user is authorized
              -> ActionT e m ()
 authCheck d a = do
   vaultContents <- liftIO readVault
@@ -128,4 +159,4 @@ insertSession sid t = modifyVault (Session sid t :)
 runDB :: SessionConfig
          -> SqlPersistT (NoLoggingT (ResourceT IO)) a
          -> IO a
-runDB c = runSqlite $ TS.pack $ dbName c
+runDB c = runSqlite $ TS.pack $ dbPath c
