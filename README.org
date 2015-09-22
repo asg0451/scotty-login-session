@@ -1,0 +1,2 @@
+* About
+Scotty-login-session is a small Haskell library for adding session support to the Scotty web framework. See =examples/Simple.hs= for an example usage.

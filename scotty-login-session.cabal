@@ -12,7 +12,7 @@ cabal-version:       >=1.10
 
 source-repository head
   type: git
-  location: git://github.com/asg0451/scotty_auth_test.git
+  location: git://github.com/asg0451/scotty-login-session.git
 
 Library
   hs-source-dirs:      src
