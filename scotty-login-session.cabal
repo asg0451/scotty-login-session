@@ -34,4 +34,17 @@ Library
                      , bytestring
                      , monad-logger
                      , resourcet
+                     , http-types
 --                     , containers
+
+Test-Suite tests
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Test.hs
+  build-depends: base
+               , scotty
+               , scotty-login-session
+               , text
+               , wai
+               , wai-extra
+  GHC-options: -Wall -threaded -fno-warn-orphans

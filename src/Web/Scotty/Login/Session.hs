@@ -10,7 +10,7 @@ Description:         Simple library for Scotty sessions and authorization
 Copyright:           (c) Miles Frankel, 2015
 License:             GPL-2
 
-A Simple library for session adding and checking, with automatic SQLite backup of session store. The store is stored in memory for fast access. Session cookie expiration and database syncing timing are configurable.
+A Simple library for session adding and checking, with automatic SQLite backup of session store. The session store is kept in memory for fast access. Session cookie expiration and database syncing timing are configurable. Note that this packages does not handle user authorization; you will have to roll your own (the package persistent is recommended) or use another package.
 
 Example usage:
 
@@ -29,11 +29,11 @@ conf = defaultSessionConfig
 main :: IO ()
 main = do
   initializeCookieDb conf
-  scotty 4040 routes
+  scotty 8000 routes
 
 routes :: ScottyM ()
 routes = do
-  S.get \"/denied\" $ S.text \"login denied -- wrong username or password\"
+  S.get \"/denied\" $ S.text \"access denied\"
   S.get \"/login\" $ do S.html $ T.pack $ unlines $
                         [ \"\<form method=\\\"POST\\\" action=\\\"/login\\\"\>\"
                         , \"\<input type=\\\"text\\\" name=\\\"username\\\"\>\"
@@ -69,6 +69,7 @@ import qualified Data.Text.Lazy                    as T
 import           Data.Time.Clock
 import           Database.Persist                  as D
 import           Database.Persist.Sqlite
+import           Network.HTTP.Types.Status         (forbidden403)
 import           Web.Scotty.Cookie                 as SC
 import           Web.Scotty.Trans                  as S
 
@@ -178,13 +179,14 @@ authCheck d a = do
      -- liftIO $ runDB conf $ selectFirst [SessionSid ==. T.fromStrict v] []
      let session = find (\s -> sessionSid s == T.fromStrict v) vaultContents
      case session of
-      Nothing -> d
+      Nothing -> status forbidden403 >> d
       Just s -> do let -- s = entityVal e
                      t = sessionExpiration s
                    curTime <- liftIO getCurrentTime
                    if diffUTCTime t curTime > 0
                      then a
-                     else d -- this shouldnt happen, browser should delete it
+                          -- this shouldnt happen, browser should delete it
+                     else status forbidden403 >> d
 
 
 -- now have to sync in-mem db to sqlite db
