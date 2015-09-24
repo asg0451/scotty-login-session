@@ -56,7 +56,7 @@ module Web.Scotty.Login.Session ( initializeCookieDb
                                 , addSession
                                 , authCheck
                                 , SessionConfig(..)
-                                , Session
+                                , Session(..)
                                 , defaultSessionConfig
                                 )
        where
@@ -189,6 +189,37 @@ authCheck d a = do
                    curTime <- liftIO getCurrentTime
                    if diffUTCTime t curTime > 0
                      then a
+                          -- this shouldnt happen, browser should delete it
+                     else d >> status forbidden403
+
+
+-- | Check whether a user is authorized, and return the Session that they are authorized for
+--
+-- Example usage:
+--
+-- @
+--    S.get \"\/auth_test\" $ authCheck (redirect \"\/denied\") $
+--      \s -> S.text $ "authorized as " ++ show s
+-- @
+authCheckWithSession :: (MonadIO m, ScottyError e)
+                        => ActionT e m () -- ^ The action to perform if user is denied
+                        -> (Session -> ActionT e m ()) -- ^ The action to perform if user is authorized
+                        -> ActionT e m ()
+authCheckWithSession d a = do
+  vaultContents <- liftIO readVault
+  c <- SC.getCookie "SessionId"
+  case c of
+   Nothing -> d
+   Just v -> do -- Text
+     -- liftIO $ runDB conf $ selectFirst [SessionSid ==. T.fromStrict v] []
+     let session = find (\s -> sessionSid s == T.fromStrict v) vaultContents
+     case session of
+      Nothing ->  d >> status forbidden403
+      Just s -> do let -- s = entityVal e
+                     t = sessionExpiration s
+                   curTime <- liftIO getCurrentTime
+                   if diffUTCTime t curTime > 0
+                     then return s >>= a
                           -- this shouldnt happen, browser should delete it
                      else d >> status forbidden403
 

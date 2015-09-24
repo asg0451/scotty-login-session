@@ -16,7 +16,7 @@ source-repository head
 
 Library
   hs-source-dirs:      src
-  ghc-options:         -Wall -fno-warn-unused-do-bind -threaded
+  ghc-options:         -Wall -fno-warn-unused-do-bind
   exposed-modules:     Web.Scotty.Login.Session
   other-modules:       Web.Scotty.Login.Internal.Model, Web.Scotty.Login.Internal.Cookies
   default-language:    Haskell2010
