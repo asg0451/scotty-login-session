@@ -56,6 +56,7 @@ module Web.Scotty.Login.Session ( initializeCookieDb
                                 , addSession
                                 , authCheck
                                 , SessionConfig(..)
+                                , Session
                                 , defaultSessionConfig
                                 )
        where
@@ -146,17 +147,20 @@ dbSyncAndCleanupLoop c = do
   modifyVault $ filter (\s -> sessionExpiration s >= t)
   dbSyncAndCleanupLoop c -- tail (hopefully) recurse
 
--- | Add a session. This gives the user a SessionId cookie, and inserts a corresponding entry into the session store.
-addSession :: SessionConfig  -> ActionT T.Text IO ()
+-- | Add a session. This gives the user a SessionId cookie, and inserts a corresponding entry into the session store. It also returns the Session that was just inserted.
+addSession :: SessionConfig -> ActionT T.Text IO (Maybe Session)
 addSession c = do
   existingCookie <- SC.getCookie "SessionId"
-  when (isNothing existingCookie) $ do
+  whenMaybe (isNothing existingCookie) $ do
     (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
     t <- liftIO getCurrentTime
     let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
         t' = addUTCTime (expirationInterval c) t
     C.setSimpleCookieExpr "SessionId" val t'
     liftIO $ insertSession (T.fromStrict val) t'
+    return $ Just $ Session (T.fromStrict val) t'
+  where whenMaybe p s = if p then s else return Nothing
+
 
 -- | Check whether a user is authorized.
 --
@@ -179,14 +183,14 @@ authCheck d a = do
      -- liftIO $ runDB conf $ selectFirst [SessionSid ==. T.fromStrict v] []
      let session = find (\s -> sessionSid s == T.fromStrict v) vaultContents
      case session of
-      Nothing -> status forbidden403 >> d
+      Nothing ->  d >> status forbidden403
       Just s -> do let -- s = entityVal e
                      t = sessionExpiration s
                    curTime <- liftIO getCurrentTime
                    if diffUTCTime t curTime > 0
                      then a
                           -- this shouldnt happen, browser should delete it
-                     else status forbidden403 >> d
+                     else d >> status forbidden403
 
 
 -- now have to sync in-mem db to sqlite db
