@@ -150,16 +150,15 @@ dbSyncAndCleanupLoop c = do
 -- | Add a session. This gives the user a SessionId cookie, and inserts a corresponding entry into the session store. It also returns the Session that was just inserted.
 addSession :: SessionConfig -> ActionT T.Text IO (Maybe Session)
 addSession c = do
-  existingCookie <- SC.getCookie "SessionId"
-  whenMaybe (isNothing existingCookie) $ do
-    (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
-    t <- liftIO getCurrentTime
-    let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
-        t' = addUTCTime (expirationInterval c) t
-    C.setSimpleCookieExpr "SessionId" val t'
-    liftIO $ insertSession (T.fromStrict val) t'
-    return $ Just $ Session (T.fromStrict val) t'
-  where whenMaybe p s = if p then s else return Nothing
+  vc <- liftIO readVault
+  liftIO $ print $ "adding session" ++ show vc
+  (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
+  t <- liftIO getCurrentTime
+  let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
+      t' = addUTCTime (expirationInterval c) t
+  C.setSimpleCookieExpr "SessionId" val t'
+  liftIO $ insertSession (T.fromStrict val) t'
+  return $ Just $ Session (T.fromStrict val) t'
 
 
 -- | Check whether a user is authorized.
@@ -176,6 +175,7 @@ authCheck :: (MonadIO m, ScottyError e)
              -> ActionT e m ()
 authCheck d a = do
   vaultContents <- liftIO readVault
+  liftIO $ print $ "checking vault contents: " ++ show vaultContents
   c <- SC.getCookie "SessionId"
   case c of
    Nothing -> d
