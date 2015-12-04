@@ -142,8 +142,9 @@ dbSyncAndCleanupLoop c = do
   threadDelay $ (floor $ syncInterval c) * 1000000
   t <- getCurrentTime
   vaultContents <- readVault
-  mapM_ (runDB c . insert) vaultContents
+  runDB c $ deleteWhere [SessionExpiration >=. t] -- delete all sessions in db
   runDB c $ deleteWhere [SessionExpiration <=. t]
+  mapM_ (runDB c . insert) vaultContents -- add vault to db
   modifyVault $ filter (\s -> sessionExpiration s >= t)
   dbSyncAndCleanupLoop c -- tail (hopefully) recurse
 
