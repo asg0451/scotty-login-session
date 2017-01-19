@@ -179,7 +179,7 @@ authCheck d a = do
   liftIO $ print $ "checking vault contents: " ++ show vaultContents
   c <- SC.getCookie "SessionId"
   case c of
-   Nothing -> d
+   Nothing -> d >> status forbidden403
    Just v -> do -- Text
      -- liftIO $ runDB conf $ selectFirst [SessionSid ==. T.fromStrict v] []
      let session = find (\s -> sessionSid s == T.fromStrict v) vaultContents

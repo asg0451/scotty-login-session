@@ -37,10 +37,8 @@ spec = do
 
   describe "denial" $ do
     withApp routes $ do
-      it "403's if not authed" $ do
-        W.get "/authcheck" `shouldRespondWith` 403
       it "denies if not authed" $ do
-        W.get "/authcheck" `shouldRespondWith` "denied"
+        W.get "/authcheck" `shouldRespondWith` "denied" {matchStatus = 403}
 
   describe "login" $ do
     withApp routes $ do
