@@ -61,6 +61,7 @@ module Web.Scotty.Login.Session ( initializeCookieDb
                                 , SessionConfig(..)
                                 , Session(..)
                                 , defaultSessionConfig
+                                , logoutSess
                                 )
        where
 import           Control.Concurrent                (forkIO, threadDelay)
@@ -195,6 +196,29 @@ authCheck d a = do
   case res of
     Just _ -> a
     Nothing -> forbiddenAction
+
+deleteSession :: Session
+              -> IO ()
+deleteSession s = modifyVault (Data.List.delete s)
+
+-- delete cookie
+logoutSess :: (MonadIO m, ScottyError e)
+           => SessionConfig
+           -> ActionT e m ()
+logoutSess sc = do
+  vaultContents <- liftIO readVault
+  c <- SC.getCookie "SessionId"
+  case c of
+    Nothing -> status internalServerError500
+    Just v -> do
+      let session = find (\lambda -> sessionSid lambda == T.fromStrict v) vaultContents
+      case session of
+        Nothing -> status internalServerError500
+        Just a -> 
+          -- delete session from vaultContents
+          liftIO $ deleteSession a
+      SC.deleteCookie "SessionId"
+
 
 
 -- | Check whether a user is authorized, and return the Session that they are authorized for
