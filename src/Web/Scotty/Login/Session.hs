@@ -2,13 +2,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+
+
 -- TODO switch to TVars?
--- TODO add debug mode in conf, base logging off of that
 
 {-|
 Module:              Web.Scotty.Login.Session
 Description:         Simple library for Scotty sessions and authorization
-Copyright:           (c) Miles Frankel, 2015
+Copyright:           (c) Miles Frankel, 2017
 License:             GPL-2
 
 A Simple library for session adding and checking, with automatic SQLite backup of session store. The session store is kept in memory for fast access. Session cookie expiration and database syncing timing are configurable. Note that this packages does not handle user authorization; you will have to roll your own (the package persistent is recommended) or use another package.
@@ -56,6 +57,7 @@ routes = do
 module Web.Scotty.Login.Session ( initializeCookieDb
                                 , addSession
                                 , authCheck
+                                , authCheckWithSession
                                 , SessionConfig(..)
                                 , Session(..)
                                 , defaultSessionConfig
@@ -66,33 +68,31 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Class         (lift)
 import           Control.Monad.Trans.Maybe
-import           Data.Maybe                        (isNothing)
-import           Data.Monoid
+import           Crypto.Random                     (getRandomBytes)
+import qualified Data.ByteString                   as B
 import qualified Data.Text                         as TS
 import qualified Data.Text.Lazy                    as T
 import           Data.Time.Clock
 import           Database.Persist                  as D
 import           Database.Persist.Sqlite
 import           Network.HTTP.Types.Status         (forbidden403)
+import           Numeric                           (showHex)
 import           Web.Scotty.Cookie                 as SC
 import           Web.Scotty.Trans                  as S
-
-import           Crypto.Random                     (getRandomBytes)
-import qualified Data.ByteString                   as B
-import           Numeric                           (showHex)
 
 import           Web.Scotty.Login.Internal.Cookies as C
 import           Web.Scotty.Login.Internal.Model
 
-import           Control.Monad.Logger              (NoLoggingT)
---                                                    runStderrLoggingT)
-import           Control.Monad.Trans.Resource      (ResourceT)
+import           Control.Monad.Logger
+import           Control.Monad.Trans.Control
+import           Control.Monad.Trans.Resource      (ResourceT, runResourceT)
 
+
+import qualified Data.HashMap.Strict               as H
 import           Data.IORef
 import           Data.List                         (find)
 import           System.IO.Unsafe                  (unsafePerformIO)
 
-import           Debug.Trace                       (traceIO)
 -- import qualified Data.Map                          as M
 
 -- | Configuration for the session database.
@@ -100,11 +100,12 @@ data SessionConfig =
   SessionConfig { dbPath             :: String          -- ^ Path to SQLite database file
                 , syncInterval       :: NominalDiffTime -- ^ Time between syncs to database (seconds)
                 , expirationInterval :: NominalDiffTime -- ^ Cookie expiration time (seconds)
+                , debugMode          :: Bool            -- ^ Debug Mode (extra logging)
                 }
 {- data Session
   = Session {sessionSid :: !T.Text, sessionExpiration :: !UTCTime} -}
 
-type SessionVault = [Session]
+type SessionVault = H.HashMap T.Text Session
 
 type SessionStore = IORef SessionVault
 
@@ -117,13 +118,15 @@ type SessionStore = IORef SessionVault
 -- * syncInterval = 1200 seconds (30 minutes),
 --
 -- * expirationInterval = 86400 seconds (1 day)
+--
+-- * debugMode = False
 
 defaultSessionConfig :: SessionConfig
-defaultSessionConfig = SessionConfig "sessions.sqlite3" 1200 120
+defaultSessionConfig = SessionConfig "sessions.sqlite3" 1200 120 False
 
 {-# NOINLINE vault #-}
 vault :: SessionStore
-vault = unsafePerformIO $ newIORef []
+vault = unsafePerformIO $ newIORef H.empty
 
 readVault :: IO SessionVault
 readVault = readIORef vault
@@ -137,8 +140,9 @@ initializeCookieDb c =  do
   t <- getCurrentTime
   ses <- runDB c $ do runMigration migrateAll
                       selectList [SessionExpiration >=. t] []
-  let sessions = map entityVal ses :: SessionVault
-  modifyVault $ const sessions
+  let sessions = entityVal <$> ses :: [Session]
+      seshMap  = H.fromList $ (\s -> (sessionSid s, s)) <$> sessions
+  modifyVault $ const seshMap
   forkIO $ dbSyncAndCleanupLoop c
   return ()
 
@@ -150,14 +154,14 @@ dbSyncAndCleanupLoop c = do
   runDB c $ deleteWhere [SessionExpiration >=. t] -- delete all sessions in db
   runDB c $ deleteWhere [SessionExpiration <=. t]
   mapM_ (runDB c . insert) vaultContents -- add vault to db
-  modifyVault $ filter (\s -> sessionExpiration s >= t)
+  modifyVault $ H.filter (\s -> sessionExpiration s >= t)
   dbSyncAndCleanupLoop c -- tail (hopefully) recurse
 
 -- | Add a session. This gives the user a SessionId cookie, and inserts a corresponding entry into the session store. It also returns the Session that was just inserted.
 addSession :: SessionConfig -> ActionT T.Text IO (Maybe Session)
 addSession c = do
   vc <- liftIO readVault
-  liftIO $ print $ "adding session" ++ show vc
+  when (debugMode c) $ liftIO $ print $ "adding session" ++ show vc
   (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
   t <- liftIO getCurrentTime
   let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
@@ -182,10 +186,9 @@ authCheck :: (MonadIO m, ScottyError e)
 authCheck d a = do
   let forbiddenAction = d >> status forbidden403
   vaultContents <- liftIO readVault
-  liftIO $ print $ "checking vault contents: " ++ show vaultContents
   res <- runMaybeT $ do
     c <- lift (SC.getCookie "SessionId") >>= liftMaybe
-    session <- liftMaybe $ find (\s -> sessionSid s == T.fromStrict c) vaultContents
+    session <- liftMaybe $ H.lookup (T.fromStrict c) vaultContents
     let t = sessionExpiration session
     curTime <- liftIO getCurrentTime
     if diffUTCTime t curTime > 0 then return a else mzero
@@ -229,12 +232,23 @@ authCheckWithSession d a = do
 insertSession :: T.Text
                  -> UTCTime
                  -> IO ()
-insertSession sid t = modifyVault (Session sid t :)
+insertSession sid t = modifyVault $ H.insert sid (Session sid t)
 
-runDB :: SessionConfig
-         -> SqlPersistT (NoLoggingT (ResourceT IO)) a
-         -> IO a
-runDB c = runSqlite $ TS.pack $ dbPath c
+
+
+runDB
+    :: (MonadIO m, MonadBaseControl IO m)
+    => SessionConfig -> SqlPersistT (LoggingT (ResourceT m)) a -> m a
+runDB c = runSqlite' c $ TS.pack $ dbPath c
+
+runSqlite'
+    :: (MonadIO m, MonadBaseControl IO m)
+    => SessionConfig -> TS.Text -> SqlPersistT (LoggingT (ResourceT m)) a -> m a
+runSqlite' conf connstr = runResourceT
+                               . runStderrLoggingT
+                               . filterLogger (const . const $ debugMode conf)
+                               . withSqliteConn connstr
+                               . runSqlConn
 
 
 -- helper function for MaybeT

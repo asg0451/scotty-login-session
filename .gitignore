@@ -7,3 +7,5 @@ cabal.sandbox.config
 LoginTest
 db.sqlite3
 sessions.sqlite3
+/src/Web/Scotty/Login/.stack-work/intero/intero14457_l.hs
+*.sqlite3

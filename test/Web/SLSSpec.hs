@@ -4,6 +4,7 @@
 module Web.SLSSpec(main, spec) where
 import           Control.Concurrent        (forkIO, killThread)
 import           Control.Exception
+import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Data.ByteString           (ByteString)
@@ -18,6 +19,7 @@ import qualified Data.Text.Lazy            as T
 import           Network.HTTP
 import           Network.HTTP.Types.Header
 import           Network.Wai.Test
+import           System.Directory
 import           System.Exit               (exitFailure)
 import           Test.Hspec
 import           Test.Hspec.Wai            as W
@@ -30,7 +32,10 @@ testPort = 4040
 baseURL = "localhost" ++ ":" ++ show testPort
 
 main = do
+  catch (void $ removeFile dbName) (\(e :: SomeException) -> return ())
   hspec spec
+  catch (void $ removeFile dbName) (\(e :: SomeException) -> return ())
+
 
 spec :: Spec
 spec = do
@@ -73,17 +78,14 @@ spec = do
 
 -- withApp :: ScottyM () -> SpecWith Application -> Spec
 -- like before_each
-withApp = with . scottyApp
+withApp r = with (initializeCookieDb conf >> scottyApp r)
 
 
 ----- basic library usage
-conf :: SessionConfig
-conf = defaultSessionConfig
+dbName = "__test__.sqlite3"
 
-runScotty :: IO ()
-runScotty = do
---  initializeCookieDb conf
-  scotty testPort routes
+conf :: SessionConfig
+conf = defaultSessionConfig { dbPath = dbName }
 
 routes :: ScottyM ()
 routes = do

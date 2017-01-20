@@ -1,5 +1,5 @@
 name:                scotty-login-session
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            Simple library for Scotty sessions and authorization
 description:         Simple library for session adding and checking, with automatic SQLite backup of session store. The store is stored in memory for fast access. Session cookie expiration and database syncing timing are configurable.
 license:             GPL-2
@@ -35,7 +35,8 @@ Library
                      , monad-logger
                      , resourcet
                      , http-types
---                     , containers
+                     , unordered-containers
+                     , monad-control
 
 test-suite Test
   main-is: Spec.hs
@@ -57,4 +58,5 @@ test-suite Test
                , case-insensitive
                , http-types
                , transformers
+               , directory
   ghc-options: -threaded -fno-warn-orphans
