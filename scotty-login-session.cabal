@@ -56,4 +56,5 @@ test-suite Test
                , bytestring
                , case-insensitive
                , http-types
+               , transformers
   ghc-options: -threaded -fno-warn-orphans

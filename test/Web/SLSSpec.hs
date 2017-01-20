@@ -5,11 +5,15 @@ module Web.SLSSpec(main, spec) where
 import           Control.Concurrent        (forkIO, killThread)
 import           Control.Exception
 import           Control.Monad
+import           Control.Monad.IO.Class
 import           Data.ByteString           (ByteString)
 import           Data.ByteString.Char8     (unpack)
 import           Data.CaseInsensitive      (CI)
 import qualified Data.CaseInsensitive      as CI
 import           Data.List                 (isPrefixOf)
+import           Data.Maybe
+import           Data.Monoid
+import qualified Data.Text.Encoding        as TE
 import qualified Data.Text.Lazy            as T
 import           Network.HTTP
 import           Network.HTTP.Types.Header
@@ -45,7 +49,7 @@ spec = do
       it "logs in successfully" $
         W.postHtmlForm "/login" [("username", "guest"), ("password", "password")] `shouldRespondWith` "authed"
 
-  describe "login session" $ do
+  describe "auth usage" $ do
     withApp routes $ do
       it "gives sessionID cookie when i log in" $ do
         resp <- W.postHtmlForm "/login" [("username", "guest"), ("password", "password")]
@@ -54,11 +58,21 @@ spec = do
         -- honestly i am shocked that this works
         liftIO $ c `shouldSatisfy` \case Nothing -> False
                                          Just s -> "SessionId=" `isPrefixOf` unpack s
+      it "allows access to page" $ do
+        resp <- W.postHtmlForm "/login" [("username", "guest"), ("password", "password")]
+        let hs = simpleHeaders resp
+            c  = fromMaybe "" $ lookup "Set-Cookie" hs
+            headers = [ ("Cookie",  c) ]
+        W.request "GET" "/authcheck" headers "" `shouldRespondWith` "authorized"
 
+      it "forbids access to page" $ do
+        resp <- W.postHtmlForm "/login" [("username", "guest"), ("password", "password")]
+        W.get "/authcheck" `shouldRespondWith` "denied" {matchStatus = 403}
 
 
 
 -- withApp :: ScottyM () -> SpecWith Application -> Spec
+-- like before_each
 withApp = with . scottyApp
 
 

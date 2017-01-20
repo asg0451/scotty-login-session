@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 -- TODO switch to TVars?
+-- TODO add debug mode in conf, base logging off of that
 
 {-|
 Module:              Web.Scotty.Login.Session
@@ -61,8 +62,10 @@ module Web.Scotty.Login.Session ( initializeCookieDb
                                 )
        where
 import           Control.Concurrent                (forkIO, threadDelay)
-import           Control.Monad                     (when)
+import           Control.Monad
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Class         (lift)
+import           Control.Monad.Trans.Maybe
 import           Data.Maybe                        (isNothing)
 import           Data.Monoid
 import qualified Data.Text                         as TS
@@ -88,6 +91,8 @@ import           Control.Monad.Trans.Resource      (ResourceT)
 import           Data.IORef
 import           Data.List                         (find)
 import           System.IO.Unsafe                  (unsafePerformIO)
+
+import           Debug.Trace                       (traceIO)
 -- import qualified Data.Map                          as M
 
 -- | Configuration for the session database.
@@ -175,23 +180,18 @@ authCheck :: (MonadIO m, ScottyError e)
              -> ActionT e m () -- ^ The action to perform if user is authorized
              -> ActionT e m ()
 authCheck d a = do
+  let forbiddenAction = d >> status forbidden403
   vaultContents <- liftIO readVault
   liftIO $ print $ "checking vault contents: " ++ show vaultContents
-  c <- SC.getCookie "SessionId"
-  case c of
-   Nothing -> d >> status forbidden403
-   Just v -> do -- Text
-     -- liftIO $ runDB conf $ selectFirst [SessionSid ==. T.fromStrict v] []
-     let session = find (\s -> sessionSid s == T.fromStrict v) vaultContents
-     case session of
-      Nothing ->  d >> status forbidden403
-      Just s -> do let -- s = entityVal e
-                     t = sessionExpiration s
-                   curTime <- liftIO getCurrentTime
-                   if diffUTCTime t curTime > 0
-                     then a
-                          -- this shouldnt happen, browser should delete it
-                     else d >> status forbidden403
+  res <- runMaybeT $ do
+    c <- lift (SC.getCookie "SessionId") >>= liftMaybe
+    session <- liftMaybe $ find (\s -> sessionSid s == T.fromStrict c) vaultContents
+    let t = sessionExpiration session
+    curTime <- liftIO getCurrentTime
+    if diffUTCTime t curTime > 0 then return a else mzero
+  case res of
+    Just _ -> a
+    Nothing -> forbiddenAction
 
 
 -- | Check whether a user is authorized, and return the Session that they are authorized for
@@ -235,3 +235,8 @@ runDB :: SessionConfig
          -> SqlPersistT (NoLoggingT (ResourceT IO)) a
          -> IO a
 runDB c = runSqlite $ TS.pack $ dbPath c
+
+
+-- helper function for MaybeT
+liftMaybe :: (Monad m) => Maybe a -> MaybeT m a
+liftMaybe = MaybeT . return
