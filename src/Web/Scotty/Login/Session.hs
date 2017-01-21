@@ -115,7 +115,7 @@ type SessionStore = IORef SessionVault
 --
 -- * dbPath = \"sessions.sqlite\",
 --
--- * syncInterval = 1200 seconds (30 minutes),
+-- * syncInterval = 1200 seconds (20 minutes),
 --
 -- * expirationInterval = 86400 seconds (1 day)
 --
