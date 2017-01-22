@@ -9,7 +9,7 @@
 --   access. Session cookie expiration and database syncing timing are
 --   configurable.
 @package scotty-login-session
-@version 0.1.0.0
+@version 0.1.2.0
 
 
 -- | A Simple library for session adding and checking, with automatic
@@ -56,6 +56,7 @@
 --         else do redirect "/denied"
 --     S.get "/authcheck" $ authCheck (redirect "/denied") $
 --       S.text "authorized"
+--     S.get "/logout" $ removeSession conf
 --   </pre>
 module Web.Scotty.Login.Session
 
@@ -66,7 +67,16 @@ initializeCookieDb :: SessionConfig -> IO ()
 -- | Add a session. This gives the user a SessionId cookie, and inserts a
 --   corresponding entry into the session store. It also returns the
 --   Session that was just inserted.
-addSession :: SessionConfig -> ActionT Text IO (Maybe Session)
+addSession :: SessionConfig -> ActionT Text IO Session
+
+-- | Remove a session. Does not take a sessionConfig (doesn't need one)
+--   
+--   Example usage:
+--   
+--   <pre>
+--   S.get "/logout" $ removeSession conf
+--   </pre>
+removeSession :: SessionConfig -> ActionT Text IO ()
 
 -- | Check whether a user is authorized.
 --   
@@ -116,7 +126,7 @@ Session :: !Text -> !UTCTime -> Session
 --   
 --   <ul>
 --   <li>dbPath = "sessions.sqlite",</li>
---   <li>syncInterval = 1200 seconds (30 minutes),</li>
+--   <li>syncInterval = 1200 seconds (20 minutes),</li>
 --   <li>expirationInterval = 86400 seconds (1 day)</li>
 --   <li>debugMode = False</li>
 --   </ul>
