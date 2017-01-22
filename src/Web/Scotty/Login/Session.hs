@@ -51,11 +51,13 @@ routes = do
       else do redirect \"/denied\"
   S.get \"\/authcheck\" $ authCheck (redirect \"\/denied\") $
     S.text \"authorized\"
+  S.get \"\/logout\" $ removeSession conf
 @
 -}
 
 module Web.Scotty.Login.Session ( initializeCookieDb
                                 , addSession
+                                , removeSession
                                 , authCheck
                                 , authCheckWithSession
                                 , SessionConfig(..)
@@ -90,7 +92,6 @@ import           Control.Monad.Trans.Resource      (ResourceT, runResourceT)
 
 import qualified Data.HashMap.Strict               as H
 import           Data.IORef
-import           Data.List                         (find)
 import           System.IO.Unsafe                  (unsafePerformIO)
 
 -- import qualified Data.Map                          as M
@@ -148,7 +149,7 @@ initializeCookieDb c =  do
 
 dbSyncAndCleanupLoop :: SessionConfig  -> IO ()
 dbSyncAndCleanupLoop c = do
-  threadDelay $ (floor $ syncInterval c) * 1000000
+  threadDelay $ floor (syncInterval c) * 1000000
   t <- getCurrentTime
   vaultContents <- readVault
   runDB c $ deleteWhere [SessionExpiration >=. t] -- delete all sessions in db
@@ -158,17 +159,17 @@ dbSyncAndCleanupLoop c = do
   dbSyncAndCleanupLoop c -- tail (hopefully) recurse
 
 -- | Add a session. This gives the user a SessionId cookie, and inserts a corresponding entry into the session store. It also returns the Session that was just inserted.
-addSession :: SessionConfig -> ActionT T.Text IO (Maybe Session)
+addSession :: SessionConfig -> ActionT T.Text IO Session
 addSession c = do
-  vc <- liftIO readVault
-  when (debugMode c) $ liftIO $ print $ "adding session" ++ show vc
   (bh :: B.ByteString) <- liftIO $ getRandomBytes 128
   t <- liftIO getCurrentTime
   let val = TS.pack $ mconcat $ map (`showHex` "") $ B.unpack bh
       t' = addUTCTime (expirationInterval c) t
+      session = Session (T.fromStrict val) t'
+  when (debugMode c) $ liftIO $ putStrLn $ "adding session " ++ show session
   C.setSimpleCookieExpr "SessionId" val t'
   liftIO $ insertSession (T.fromStrict val) t'
-  return $ Just $ Session (T.fromStrict val) t'
+  return $ Session (T.fromStrict val) t'
 
 
 -- | Check whether a user is authorized.
@@ -183,19 +184,7 @@ authCheck :: (MonadIO m, ScottyError e)
              => ActionT e m () -- ^ The action to perform if user is denied
              -> ActionT e m () -- ^ The action to perform if user is authorized
              -> ActionT e m ()
-authCheck d a = do
-  let forbiddenAction = d >> status forbidden403
-  vaultContents <- liftIO readVault
-  res <- runMaybeT $ do
-    c <- lift (SC.getCookie "SessionId") >>= liftMaybe
-    session <- liftMaybe $ H.lookup (T.fromStrict c) vaultContents
-    let t = sessionExpiration session
-    curTime <- liftIO getCurrentTime
-    if diffUTCTime t curTime > 0 then return a else mzero
-  case res of
-    Just _ -> a
-    Nothing -> forbiddenAction
-
+authCheck d a = authCheckWithSession d (const a)
 
 -- | Check whether a user is authorized, and return the Session that they are authorized for
 --
@@ -205,35 +194,43 @@ authCheck d a = do
 --    S.get \"\/auth_test\" $ authCheck (redirect \"\/denied\") $
 --      \s -> S.text $ "authorized as " ++ show s
 -- @
-authCheckWithSession :: (MonadIO m, ScottyError e)
-                        => ActionT e m () -- ^ The action to perform if user is denied
-                        -> (Session -> ActionT e m ()) -- ^ The action to perform if user is authorized
-                        -> ActionT e m ()
+
+authCheckWithSession
+ :: (MonadIO m, ScottyError e)
+             => ActionT e m ()              -- ^ The action to perform if user is denied
+             -> (Session -> ActionT e m ()) -- ^ The action to perform if user is authorized
+             -> ActionT e m ()
 authCheckWithSession d a = do
   vaultContents <- liftIO readVault
-  c <- SC.getCookie "SessionId"
-  case c of
-   Nothing -> d
-   Just v -> do -- Text
-     -- liftIO $ runDB conf $ selectFirst [SessionSid ==. T.fromStrict v] []
-     let session = find (\s -> sessionSid s == T.fromStrict v) vaultContents
-     case session of
-      Nothing ->  d >> status forbidden403
-      Just s -> do let -- s = entityVal e
-                     t = sessionExpiration s
-                   curTime <- liftIO getCurrentTime
-                   if diffUTCTime t curTime > 0
-                     then return s >>= a
-                          -- this shouldnt happen, browser should delete it
-                     else d >> status forbidden403
+  maybe (d >> status forbidden403) return <=< runMaybeT $ do
+    c <- lift (SC.getCookie "SessionId") >>= liftMaybe
+    session <- liftMaybe $ H.lookup (T.fromStrict c) vaultContents
+    curTime <- liftIO getCurrentTime
+    guard $ diffUTCTime (sessionExpiration session) curTime > 0 -- this shouldn't abort, browser should delete it
+    lift $ a session
 
 
--- now have to sync in-mem db to sqlite db
+-- | Remove a session. Does not take a sessionConfig (doesn't need one)
+--
+-- Example usage:
+--
+-- @
+--   S.get \"\/logout\" $ removeSession conf
+-- @
+
+removeSession :: SessionConfig -> ActionT T.Text IO ()
+removeSession c = do
+  sid <- SC.getCookie "SessionId"
+  case sid of
+    Just sid' -> do liftIO $ modifyVault $ H.delete (T.fromStrict sid')
+                    when (debugMode c) $ liftIO $ putStrLn $ "removed session " ++ show sid
+    Nothing -> return ()
+
+-- inserts session into vault
 insertSession :: T.Text
                  -> UTCTime
                  -> IO ()
 insertSession sid t = modifyVault $ H.insert sid (Session sid t)
-
 
 
 runDB

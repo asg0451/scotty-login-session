@@ -26,6 +26,7 @@ import           Test.Hspec.Wai            as W
 import           Test.Hspec.Wai.Internal
 import           Web.Scotty                as S
 import           Web.Scotty.Cookie         as C
+
 import           Web.Scotty.Login.Session
 
 testPort = 4040
@@ -74,6 +75,16 @@ spec = do
         resp <- W.postHtmlForm "/login" [("username", "guest"), ("password", "password")]
         W.get "/authcheck" `shouldRespondWith` "denied" {matchStatus = 403}
 
+  describe "logout" $ do
+    withApp routes $ do
+      it "logs out correctly" $ do
+        resp <- W.postHtmlForm "/login" [("username", "guest"), ("password", "password")]
+        let hs = simpleHeaders resp
+            c  = fromMaybe "" $ lookup "Set-Cookie" hs
+            headers = [ ("Cookie",  c) ]
+        W.request "GET" "/authcheck" headers "" `shouldRespondWith` "authorized"
+        W.request "GET" "/logout" headers ""
+        W.request "GET" "/authcheck" headers "" `shouldRespondWith` "denied" {matchStatus = 403}
 
 
 -- withApp :: ScottyM () -> SpecWith Application -> Spec
@@ -105,3 +116,4 @@ routes = do
       else do S.html "denied"
   S.get "/authcheck" $ authCheck (S.html "denied") $
     S.html "authorized"
+  S.get "/logout" $ removeSession conf

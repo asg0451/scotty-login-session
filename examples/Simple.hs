@@ -34,3 +34,4 @@ routes = do
       else do redirect "/denied"
   S.get "/authed" $ authCheck (redirect "/denied") $
     S.text "authedd"
+  S.get "/logout" $ removeSession conf
