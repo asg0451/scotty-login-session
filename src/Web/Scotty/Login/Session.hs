@@ -152,8 +152,7 @@ dbSyncAndCleanupLoop c = do
   threadDelay $ floor (syncInterval c) * 1000000
   t <- getCurrentTime
   vaultContents <- readVault
-  runDB c $ deleteWhere [SessionExpiration >=. t] -- delete all sessions in db
-  runDB c $ deleteWhere [SessionExpiration <=. t]
+  runDB c $ deleteWhere ([] :: [Filter Session]) -- delete all sessions in db
   mapM_ (runDB c . insert) vaultContents -- add vault to db
   modifyVault $ H.filter (\s -> sessionExpiration s >= t)
   dbSyncAndCleanupLoop c -- tail (hopefully) recurse
@@ -200,11 +199,10 @@ authCheckWithSession
              => ActionT e m ()              -- ^ The action to perform if user is denied
              -> (Session -> ActionT e m ()) -- ^ The action to perform if user is authorized
              -> ActionT e m ()
-authCheckWithSession d a = do
-  vaultContents <- liftIO readVault
+authCheckWithSession d a =
   maybe (d >> status forbidden403) return <=< runMaybeT $ do
     c <- MaybeT $ SC.getCookie "SessionId"
-    session <- MaybeT . return $ H.lookup (T.fromStrict c) vaultContents
+    session <- MaybeT $ H.lookup (T.fromStrict c) <$> liftIO readVault
     curTime <- liftIO getCurrentTime
     guard $ diffUTCTime (sessionExpiration session) curTime > 0 -- this shouldn't abort, browser should delete it
     lift $ a session
@@ -218,13 +216,11 @@ authCheckWithSession d a = do
 --   S.get \"\/logout\" $ removeSession conf
 -- @
 
-removeSession :: SessionConfig -> ActionT T.Text IO ()
-removeSession c = do
-  sid <- SC.getCookie "SessionId"
-  case sid of
-    Just sid' -> do liftIO $ modifyVault $ H.delete (T.fromStrict sid')
-                    when (debugMode c) $ liftIO $ putStrLn $ "removed session " ++ show sid
-    Nothing -> return ()
+removeSession :: (ScottyError e, MonadIO m) => SessionConfig -> ActionT e m ()
+removeSession c = (SC.getCookie "SessionId" >>=) $ mapM_ $ \sid -> do
+  liftIO $ modifyVault $ H.delete (T.fromStrict sid)
+  when (debugMode c) $ liftIO $ putStrLn $ "removed session " ++ show sid
+
 
 -- inserts session into vault
 insertSession :: T.Text
