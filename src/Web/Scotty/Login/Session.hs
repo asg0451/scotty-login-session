@@ -204,7 +204,7 @@ authCheckWithSession d a = do
   vaultContents <- liftIO readVault
   maybe (d >> status forbidden403) return <=< runMaybeT $ do
     c <- MaybeT $ SC.getCookie "SessionId"
-    session <- liftMaybe $ H.lookup (T.fromStrict c) vaultContents
+    session <- MaybeT . return $ H.lookup (T.fromStrict c) vaultContents
     curTime <- liftIO getCurrentTime
     guard $ diffUTCTime (sessionExpiration session) curTime > 0 -- this shouldn't abort, browser should delete it
     lift $ a session
@@ -246,8 +246,3 @@ runSqlite' conf connstr = runResourceT
                                . filterLogger (const . const $ debugMode conf)
                                . withSqliteConn connstr
                                . runSqlConn
-
-
--- helper function for MaybeT
-liftMaybe :: (Monad m) => Maybe a -> MaybeT m a
-liftMaybe = MaybeT . return
