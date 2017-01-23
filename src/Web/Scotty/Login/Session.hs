@@ -203,7 +203,7 @@ authCheckWithSession
 authCheckWithSession d a = do
   vaultContents <- liftIO readVault
   maybe (d >> status forbidden403) return <=< runMaybeT $ do
-    c <- lift (SC.getCookie "SessionId") >>= liftMaybe
+    c <- MaybeT $ SC.getCookie "SessionId"
     session <- liftMaybe $ H.lookup (T.fromStrict c) vaultContents
     curTime <- liftIO getCurrentTime
     guard $ diffUTCTime (sessionExpiration session) curTime > 0 -- this shouldn't abort, browser should delete it
