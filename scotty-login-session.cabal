@@ -38,6 +38,7 @@ Library
                      , http-types
                      , unordered-containers
                      , monad-control
+                     , unliftio-core
 
 test-suite Test
   main-is: Spec.hs

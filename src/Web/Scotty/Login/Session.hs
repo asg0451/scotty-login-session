@@ -88,6 +88,7 @@ import           Web.Scotty.Login.Internal.Model
 import           Control.Monad.Logger
 import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource      (ResourceT, runResourceT)
+import           Control.Monad.IO.Unlift           (MonadUnliftIO)
 
 
 import qualified Data.HashMap.Strict               as H
@@ -230,12 +231,12 @@ insertSession sid t = modifyVault $ H.insert sid (Session sid t)
 
 
 runDB
-    :: (MonadIO m, MonadBaseControl IO m)
+    :: (MonadIO m, MonadUnliftIO m)
     => SessionConfig -> SqlPersistT (LoggingT (ResourceT m)) a -> m a
 runDB c = runSqlite' c $ TS.pack $ dbPath c
 
 runSqlite'
-    :: (MonadIO m, MonadBaseControl IO m)
+    :: (MonadIO m, MonadUnliftIO m) 
     => SessionConfig -> TS.Text -> SqlPersistT (LoggingT (ResourceT m)) a -> m a
 runSqlite' conf connstr = runResourceT
                                . runStderrLoggingT
