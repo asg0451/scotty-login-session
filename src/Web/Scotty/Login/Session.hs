@@ -231,7 +231,7 @@ insertSession sid t = modifyVault $ H.insert sid (Session sid t)
 
 
 runDB
-    :: (MonadIO m, MonadBaseControl IO m)
+    :: (MonadIO m, MonadUnliftIO m)
     => SessionConfig -> SqlPersistT (LoggingT (ResourceT m)) a -> m a
 runDB c = runSqlite' c $ TS.pack $ dbPath c
 
